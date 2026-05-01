@@ -73,9 +73,7 @@
         {% for label, n in meta.skipped.items() %}
         <tr><td>{{ label }}</td><td>{{ "{:,}".format(n) }}</td></tr>
         {% endfor %}
-        {% if meta.skipped|length > 1 %}
         <tr class="total-row"><td>Total</td><td>{{ "{:,}".format(meta.skipped.values()|sum) }}</td></tr>
-        {% endif %}
       </table>
     </div>
     {% endif %}
