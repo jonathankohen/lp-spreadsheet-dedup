@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LP List Processor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f4f4f5; color: #111; padding: 2rem 1rem; }
+    .page { max-width: 720px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+    h1 { font-size: 1.5rem; font-weight: 700; }
+    a.logout { font-size: .85rem; color: #6b7280; text-decoration: none; }
+    a.logout:hover { color: #111; }
+    p.sub { color: #6b7280; font-size: .9rem; margin-bottom: 2rem; }
+    .zones { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+    @media (max-width: 560px) { .zones { grid-template-columns: 1fr; } }
+    .zone { border: 2px dashed #d1d5db; border-radius: 10px; padding: 1.5rem; text-align: center; transition: border-color .2s, background .2s; }
+    .zone.drag-over { border-color: #2563eb; background: #eff6ff; }
+    .zone h2 { font-size: 1rem; font-weight: 700; margin-bottom: .5rem; }
+    .zone p { font-size: .8rem; color: #6b7280; margin-bottom: .9rem; }
+    .zone input[type=file] { display: none; }
+    .zone label.pick { display: inline-block; padding: .45rem 1rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; font-size: .85rem; cursor: pointer; font-weight: 500; }
+    .zone label.pick:hover { background: #e5e7eb; }
+    .file-list { margin-top: .75rem; font-size: .78rem; color: #374151; text-align: left; }
+    .file-list span { display: block; padding: .15rem 0; }
+    button[type=submit] { width: 100%; padding: .8rem; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; }
+    button[type=submit]:hover { background: #1d4ed8; }
+    button[type=submit]:disabled { background: #93c5fd; cursor: default; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>LP List Processor</h1>
+      <a class="logout" href="/logout">Sign out</a>
+    </header>
+    <p class="sub">Upload Pollstar XLSX files by category. Each category is deduped and exported as Mailchimp + Salesforce CSVs.</p>
+
+    <form method="post" action="/process" enctype="multipart/form-data" id="upload-form">
+      <div class="zones">
+        {% for key, label in [("agent","Agent"),("presenter","Presenter"),("artist","Artist"),("record_label","Record Label")] %}
+        <div class="zone" id="zone-{{ key }}" ondragover="onDragOver(event,'{{ key }}')" ondragleave="onDragLeave('{{ key }}')" ondrop="onDrop(event,'{{ key }}')">
+          <h2>{{ label }}</h2>
+          <p>Drag &amp; drop XLSX files here, or</p>
+          <label class="pick" for="input-{{ key }}">Browse files</label>
+          <input type="file" id="input-{{ key }}" name="{{ key }}_files" accept=".xlsx" multiple onchange="updateList('{{ key }}')">
+          <div class="file-list" id="list-{{ key }}"></div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <button type="submit" id="submit-btn">Process Files</button>
+    </form>
+  </div>
+
+  <script>
+    const inputs = {};
+    ['agent','presenter','artist','record_label'].forEach(k => { inputs[k] = document.getElementById('input-' + k); });
+
+    function updateList(key) {
+      const files = inputs[key].files;
+      const list = document.getElementById('list-' + key);
+      list.innerHTML = '';
+      for (const f of files) {
+        const s = document.createElement('span');
+        s.textContent = '📄 ' + f.name;
+        list.appendChild(s);
+      }
+    }
+
+    function onDragOver(e, key) {
+      e.preventDefault();
+      document.getElementById('zone-' + key).classList.add('drag-over');
+    }
+
+    function onDragLeave(key) {
+      document.getElementById('zone-' + key).classList.remove('drag-over');
+    }
+
+    function onDrop(e, key) {
+      e.preventDefault();
+      document.getElementById('zone-' + key).classList.remove('drag-over');
+      const dt = new DataTransfer();
+      for (const f of e.dataTransfer.files) { if (f.name.endsWith('.xlsx')) dt.items.add(f); }
+      inputs[key].files = dt.files;
+      updateList(key);
+    }
+
+    document.getElementById('upload-form').addEventListener('submit', function() {
+      document.getElementById('submit-btn').disabled = true;
+      document.getElementById('submit-btn').textContent = 'Processing…';
+    });
+  </script>
+</body>
+</html>
