@@ -75,7 +75,7 @@ def process():
 
     for key, label in CATEGORIES:
         uploads = request.files.getlist(f"{key}_files")
-        uploads = [f for f in uploads if f and f.filename]
+        uploads = [f for f in uploads if f and f.filename and f.filename.lower().endswith(".xlsx")]
         if not uploads:
             continue
         df = dedup_by_email(load_file_objects(uploads))

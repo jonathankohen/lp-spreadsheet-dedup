@@ -73,7 +73,7 @@ def load_file_objects(file_objects) -> pd.DataFrame:
     """Load a list of werkzeug FileStorage (or any file-like) objects into a DataFrame."""
     dfs = []
     for f in file_objects:
-        if f and f.filename:
+        if f and f.filename and f.filename.lower().endswith(".xlsx"):
             dfs.append(pd.read_excel(f.stream, dtype=str))
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
