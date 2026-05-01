@@ -78,6 +78,12 @@ def load_file_objects(file_objects) -> pd.DataFrame:
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
 
+def filter_no_email(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """Remove rows with no email address. Returns (filtered_df, removed_count)."""
+    has_email = df["Email"].fillna("").str.strip() != ""
+    return df[has_email].reset_index(drop=True), int((~has_email).sum())
+
+
 def dedup_by_email(df: pd.DataFrame) -> pd.DataFrame:
     """
     Drop duplicate contacts. Two rows are duplicates when they share the same

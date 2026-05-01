@@ -15,7 +15,7 @@ from flask import (
     url_for,
 )
 
-from main import dedup_by_email, generate_csvs, load_file_objects
+from main import dedup_by_email, filter_no_email, generate_csvs, load_file_objects
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
@@ -80,6 +80,7 @@ def process():
 
     job_id = str(uuid.uuid4())
     counts = {}
+    skipped = {}
     files_by_category = {}
     file_bytes = {}
 
@@ -88,15 +89,19 @@ def process():
         uploads = [f for f in uploads if f and f.filename and f.filename.lower().endswith(".xlsx")]
         if not uploads:
             continue
-        df = dedup_by_email(load_file_objects(uploads))
+        raw = load_file_objects(uploads)
+        df, no_email_count = filter_no_email(raw)
+        df = dedup_by_email(df)
         counts[label] = len(df)
+        if no_email_count:
+            skipped[label] = no_email_count
         csvs = generate_csvs(key, df)
         for filename, (data, _mime) in csvs.items():
             file_bytes[filename] = data
         files_by_category[label] = list(csvs.keys())
 
     JOBS[job_id] = {
-        "meta": {"counts": counts, "files": files_by_category},
+        "meta": {"counts": counts, "skipped": skipped, "files": files_by_category},
         "files": file_bytes,
         "ts": time.time(),
     }

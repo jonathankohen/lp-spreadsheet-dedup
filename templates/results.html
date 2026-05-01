@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Results — LP List Processor</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #f4f4f5; color: #111; padding: 2rem 1rem; }
@@ -21,6 +22,12 @@
     .breakdown .item .num { font-size: 1.4rem; font-weight: 700; }
     .breakdown .item .lbl { font-size: .75rem; color: #6b7280; margin-top: .2rem; }
 
+    .skipped { background: #fff; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 8px rgba(0,0,0,.06); }
+    .skipped h2 { font-size: 1rem; font-weight: 700; margin-bottom: .75rem; color: #92400e; }
+    .skipped table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+    .skipped td { padding: .3rem .5rem; color: #374151; }
+    .skipped td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+    .skipped tr.total-row td { font-weight: 700; border-top: 1px solid #e5e7eb; padding-top: .5rem; }
     .downloads { background: #fff; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 8px rgba(0,0,0,.06); }
     .downloads h2 { font-size: 1rem; font-weight: 700; margin-bottom: 1rem; }
     .cat-block { margin-bottom: 1.2rem; }
@@ -58,6 +65,20 @@
       </div>
       {% endif %}
     </div>
+
+    {% if meta.skipped %}
+    <div class="skipped">
+      <h2>Rows excluded (no email)</h2>
+      <table>
+        {% for label, n in meta.skipped.items() %}
+        <tr><td>{{ label }}</td><td>{{ "{:,}".format(n) }}</td></tr>
+        {% endfor %}
+        {% if meta.skipped|length > 1 %}
+        <tr class="total-row"><td>Total</td><td>{{ "{:,}".format(meta.skipped.values()|sum) }}</td></tr>
+        {% endif %}
+      </table>
+    </div>
+    {% endif %}
 
     {% if meta.files %}
     <div class="downloads">
