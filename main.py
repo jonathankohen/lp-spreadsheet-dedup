@@ -135,6 +135,93 @@ def format_phone(raw: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Country / state normalisation
+# ---------------------------------------------------------------------------
+
+COUNTRY_CODES = {
+    "afghanistan": "AFG", "albania": "ALB", "algeria": "DZA", "andorra": "AND",
+    "angola": "AGO", "argentina": "ARG", "armenia": "ARM", "australia": "AUS",
+    "austria": "AUT", "azerbaijan": "AZE", "bahrain": "BHR", "bangladesh": "BGD",
+    "belarus": "BLR", "belgium": "BEL", "bolivia": "BOL", "bosnia and herzegovina": "BIH",
+    "botswana": "BWA", "brazil": "BRA", "bulgaria": "BGR", "cambodia": "KHM",
+    "cameroon": "CMR", "canada": "CAN", "chile": "CHL", "china": "CHN",
+    "colombia": "COL", "costa rica": "CRI", "croatia": "HRV", "cuba": "CUB",
+    "cyprus": "CYP", "czech republic": "CZE", "czechia": "CZE", "denmark": "DNK",
+    "dominican republic": "DOM", "ecuador": "ECU", "egypt": "EGY", "el salvador": "SLV",
+    "estonia": "EST", "ethiopia": "ETH", "finland": "FIN", "france": "FRA",
+    "georgia": "GEO", "germany": "DEU", "ghana": "GHA", "greece": "GRC",
+    "guatemala": "GTM", "honduras": "HND", "hong kong": "HKG", "hungary": "HUN",
+    "iceland": "ISL", "india": "IND", "indonesia": "IDN", "iran": "IRN",
+    "iraq": "IRQ", "ireland": "IRL", "israel": "ISR", "italy": "ITA",
+    "jamaica": "JAM", "japan": "JPN", "jordan": "JOR", "kazakhstan": "KAZ",
+    "kenya": "KEN", "kuwait": "KWT", "latvia": "LVA", "lebanon": "LBN",
+    "lithuania": "LTU", "luxembourg": "LUX", "malaysia": "MYS", "malta": "MLT",
+    "mexico": "MEX", "moldova": "MDA", "monaco": "MCO", "morocco": "MAR",
+    "mozambique": "MOZ", "myanmar": "MMR", "namibia": "NAM", "nepal": "NPL",
+    "netherlands": "NLD", "new zealand": "NZL", "nicaragua": "NIC", "nigeria": "NGA",
+    "north korea": "PRK", "north macedonia": "MKD", "norway": "NOR", "oman": "OMN",
+    "pakistan": "PAK", "panama": "PAN", "paraguay": "PRY", "peru": "PER",
+    "philippines": "PHL", "poland": "POL", "portugal": "PRT", "puerto rico": "PRI",
+    "qatar": "QAT", "romania": "ROU", "russia": "RUS", "russian federation": "RUS",
+    "saudi arabia": "SAU", "senegal": "SEN", "serbia": "SRB", "singapore": "SGP",
+    "slovakia": "SVK", "slovenia": "SVN", "south africa": "ZAF", "south korea": "KOR",
+    "spain": "ESP", "sri lanka": "LKA", "sweden": "SWE", "switzerland": "CHE",
+    "taiwan": "TWN", "tanzania": "TZA", "thailand": "THA", "trinidad and tobago": "TTO",
+    "tunisia": "TUN", "turkey": "TUR", "türkiye": "TUR", "ukraine": "UKR",
+    "united arab emirates": "ARE", "uae": "ARE", "united kingdom": "GBR",
+    "uk": "GBR", "great britain": "GBR", "england": "GBR", "scotland": "GBR",
+    "wales": "GBR", "united states": "USA", "united states of america": "USA",
+    "us": "USA", "usa": "USA", "u.s.a.": "USA", "uruguay": "URY",
+    "uzbekistan": "UZB", "venezuela": "VEN", "vietnam": "VNM", "zimbabwe": "ZWE",
+    "bahamas": "BHS", "the bahamas": "BHS", "faroe islands": "FRO",
+    "macedonia": "MKD", "swaziland": "SWZ", "eswatini": "SWZ",
+    "republic of trinidad and tobago": "TTO",
+}
+
+STATE_CODES = {
+    # US states
+    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
+    "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
+    "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
+    "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
+    "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
+    "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
+    "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
+    "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+    "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
+    "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
+    "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
+    "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
+    "wisconsin": "WI", "wyoming": "WY", "district of columbia": "DC",
+    "washington dc": "DC", "washington d.c.": "DC",
+    # Canadian provinces & territories
+    "alberta": "AB", "british columbia": "BC", "manitoba": "MB",
+    "new brunswick": "NB", "newfoundland and labrador": "NL",
+    "newfoundland & labrador": "NL", "newfoundland": "NL",
+    "northwest territories": "NT", "nova scotia": "NS", "nunavut": "NU",
+    "ontario": "ON", "prince edward island": "PE", "quebec": "QC",
+    "québec": "QC", "saskatchewan": "SK", "yukon": "YT",
+}
+
+
+def norm_country(val: str) -> str:
+    return COUNTRY_CODES.get(val.strip().lower(), val.strip())
+
+
+def norm_state(val: str) -> str:
+    stripped = val.strip()
+    return STATE_CODES.get(stripped.lower(), stripped)
+
+
+def addr_state(row: pd.Series) -> str:
+    return norm_state(v(row, "MailingState") or v(row, "PhysicalState"))
+
+
+def addr_country(row: pd.Series) -> str:
+    return norm_country(v(row, "MailingCountry") or v(row, "PhysicalCountry"))
+
+
+# ---------------------------------------------------------------------------
 # Mailchimp builders
 # ---------------------------------------------------------------------------
 
@@ -215,9 +302,9 @@ def build_mailchimp_agent(df: pd.DataFrame, lead_source: str) -> list[dict]:
                 "Lead Source": lead_source,
                 "Street": street(r),
                 "City": v(r, "MailingCity") or v(r, "PhysicalCity"),
-                "State": v(r, "MailingState") or v(r, "PhysicalState"),
+                "State": addr_state(r),
                 "Zip/Postal code": v(r, "MailingZip") or v(r, "PhysicalZip"),
-                "Country": v(r, "MailingCountry") or v(r, "PhysicalCountry"),
+                "Country": addr_country(r),
                 "Email": v(r, "Email"),
                 "Phone": format_phone(v(r, "phone")),
             }
@@ -238,9 +325,9 @@ def build_mailchimp_presenter(df: pd.DataFrame, lead_source: str) -> list[dict]:
                 "TAG": lead_source,
                 "Street": street(r),
                 "City": v(r, "MailingCity") or v(r, "PhysicalCity"),
-                "State": v(r, "MailingState") or v(r, "PhysicalState"),
+                "State": addr_state(r),
                 "Zip/Postal code": v(r, "MailingZip") or v(r, "PhysicalZip"),
-                "Country": v(r, "MailingCountry") or v(r, "PhysicalCountry"),
+                "Country": addr_country(r),
                 "Email": v(r, "Email"),
                 "Phone": format_phone(v(r, "phone")),
                 "Capacity": v(r, "Capacity"),
@@ -262,9 +349,9 @@ def build_mailchimp_artist(df: pd.DataFrame, lead_source: str) -> list[dict]:
                 "TAG": lead_source,
                 "Street": street(r),
                 "City": v(r, "MailingCity") or v(r, "PhysicalCity"),
-                "State": v(r, "MailingState") or v(r, "PhysicalState"),
+                "State": addr_state(r),
                 "Zip/Postal code": v(r, "MailingZip") or v(r, "PhysicalZip"),
-                "Country": v(r, "MailingCountry") or v(r, "PhysicalCountry"),
+                "Country": addr_country(r),
                 "Email": v(r, "Email"),
                 "Phone": format_phone(v(r, "phone")),
             }
@@ -285,9 +372,9 @@ def build_mailchimp_record_label(df: pd.DataFrame, lead_source: str) -> list[dic
                 "TAG": lead_source,
                 "Street": street(r),
                 "City": v(r, "MailingCity") or v(r, "PhysicalCity"),
-                "State": v(r, "MailingState") or v(r, "PhysicalState"),
+                "State": addr_state(r),
                 "Zip/Postal code": v(r, "MailingZip") or v(r, "PhysicalZip"),
-                "Country": v(r, "MailingCountry") or v(r, "PhysicalCountry"),
+                "Country": addr_country(r),
                 "Email": v(r, "Email"),
                 "Phone": format_phone(v(r, "phone")),
             }
@@ -340,9 +427,9 @@ SF_RECORD_LABEL_COLS = SF_BASE_COLS[:5] + ["Department"] + SF_BASE_COLS[5:]
 def _sf_address_block(row: pd.Series) -> dict:
     s = street(row)
     city = v(row, "MailingCity") or v(row, "PhysicalCity")
-    state = v(row, "MailingState") or v(row, "PhysicalState")
+    state = addr_state(row)
     zipcode = v(row, "MailingZip") or v(row, "PhysicalZip")
-    country = v(row, "MailingCountry") or v(row, "PhysicalCountry")
+    country = addr_country(row)
     return {
         "Shipping Street ": s,
         "Shipping City": city,
