@@ -90,11 +90,13 @@ def process():
         if not uploads:
             continue
         raw = load_file_objects(uploads)
-        df, no_email_count = filter_no_email(raw)
+        df, no_email_df = filter_no_email(raw)
         df = dedup_by_email(df)
         counts[label] = len(df)
-        skipped[label] = {"included": len(df), "excluded": no_email_count, "total": len(df) + no_email_count}
+        skipped[label] = {"included": len(df), "excluded": len(no_email_df), "total": len(df) + len(no_email_df)}
         csvs = generate_csvs(key, df)
+        if not no_email_df.empty:
+            csvs.update(generate_csvs(key, no_email_df, "Phone List"))
         for filename, (data, _mime) in csvs.items():
             file_bytes[filename] = data
         files_by_category[label] = list(csvs.keys())

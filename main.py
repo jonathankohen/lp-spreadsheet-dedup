@@ -78,10 +78,10 @@ def load_file_objects(file_objects) -> pd.DataFrame:
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
 
-def filter_no_email(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
-    """Remove rows with no email address. Returns (filtered_df, removed_count)."""
+def filter_no_email(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Split into (with_email_df, no_email_df)."""
     has_email = df["Email"].fillna("").str.strip() != ""
-    return df[has_email].reset_index(drop=True), int((~has_email).sum())
+    return df[has_email].reset_index(drop=True), df[~has_email].reset_index(drop=True)
 
 
 def dedup_by_email(df: pd.DataFrame) -> pd.DataFrame:
@@ -541,22 +541,24 @@ def _rows_to_bytes(cols: list[str], rows: list[dict], encoding: str) -> bytes:
     return buf.getvalue().encode(encoding)
 
 
-def generate_csvs(category: str, df: pd.DataFrame) -> dict:
+def generate_csvs(category: str, df: pd.DataFrame, suffix: str = "") -> dict:
     """
     Returns {filename: (bytes, mime_type)} for Mailchimp + SF outputs.
     category must be one of: agent, presenter, artist, record_label
+    suffix is appended before .csv, e.g. "Phone List" → "... - Phone List.csv"
     """
     today = date.today().strftime("%Y-%m-%d")
+    sfx = f" - {suffix}" if suffix else ""
     out = {}
 
     if category == "agent":
         mc_rows = build_mailchimp_agent(df, AGENT_LEAD_SOURCE)
         sf_rows = build_sf_agent(df, AGENT_LEAD_SOURCE)
-        out[f"Mailchimp Agent List - {today}.csv"] = (
+        out[f"Mailchimp Agent List - {today}{sfx}.csv"] = (
             _rows_to_bytes(MC_AGENT_COLS, mc_rows, "utf-8-sig"),
             "text/csv",
         )
-        out[f"SF Agent List - {today}.csv"] = (
+        out[f"SF Agent List - {today}{sfx}.csv"] = (
             _rows_to_bytes(SF_AGENT_COLS, sf_rows, "utf-16"),
             "text/csv",
         )
@@ -564,11 +566,11 @@ def generate_csvs(category: str, df: pd.DataFrame) -> dict:
     elif category == "presenter":
         mc_rows = build_mailchimp_presenter(df, PRESENTER_LEAD_SOURCE)
         sf_rows = build_sf_presenter(df, PRESENTER_LEAD_SOURCE)
-        out[f"Mailchimp Presenter List - {today}.csv"] = (
+        out[f"Mailchimp Presenter List - {today}{sfx}.csv"] = (
             _rows_to_bytes(MC_PRESENTER_COLS, mc_rows, "utf-8-sig"),
             "text/csv",
         )
-        out[f"SF Presenter List - {today}.csv"] = (
+        out[f"SF Presenter List - {today}{sfx}.csv"] = (
             _rows_to_bytes(SF_PRESENTER_COLS, sf_rows, "utf-16"),
             "text/csv",
         )
@@ -576,11 +578,11 @@ def generate_csvs(category: str, df: pd.DataFrame) -> dict:
     elif category == "artist":
         mc_rows = build_mailchimp_artist(df, ARTIST_LEAD_SOURCE)
         sf_rows = build_sf_artist(df, ARTIST_LEAD_SOURCE)
-        out[f"Mailchimp Artist List - {today}.csv"] = (
+        out[f"Mailchimp Artist List - {today}{sfx}.csv"] = (
             _rows_to_bytes(MC_ARTIST_COLS, mc_rows, "utf-8-sig"),
             "text/csv",
         )
-        out[f"SF Artist List - {today}.csv"] = (
+        out[f"SF Artist List - {today}{sfx}.csv"] = (
             _rows_to_bytes(SF_ARTIST_COLS, sf_rows, "utf-16"),
             "text/csv",
         )
@@ -588,11 +590,11 @@ def generate_csvs(category: str, df: pd.DataFrame) -> dict:
     elif category == "record_label":
         mc_rows = build_mailchimp_record_label(df, RECORD_LABEL_LEAD_SOURCE)
         sf_rows = build_sf_record_label(df, RECORD_LABEL_LEAD_SOURCE)
-        out[f"Mailchimp Record Label List - {today}.csv"] = (
+        out[f"Mailchimp Record Label List - {today}{sfx}.csv"] = (
             _rows_to_bytes(MC_RECORD_LABEL_COLS, mc_rows, "utf-8-sig"),
             "text/csv",
         )
-        out[f"SF Record Label List - {today}.csv"] = (
+        out[f"SF Record Label List - {today}{sfx}.csv"] = (
             _rows_to_bytes(SF_RECORD_LABEL_COLS, sf_rows, "utf-16"),
             "text/csv",
         )
