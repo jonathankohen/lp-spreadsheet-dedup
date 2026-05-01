@@ -93,8 +93,7 @@ def process():
         df, no_email_count = filter_no_email(raw)
         df = dedup_by_email(df)
         counts[label] = len(df)
-        if no_email_count:
-            skipped[label] = no_email_count
+        skipped[label] = {"included": len(df), "excluded": no_email_count, "total": len(df) + no_email_count}
         csvs = generate_csvs(key, df)
         for filename, (data, _mime) in csvs.items():
             file_bytes[filename] = data
@@ -116,7 +115,7 @@ def results(job_id):
     if not job:
         return render_template("expired.html"), 404
     meta = job["meta"]
-    total = sum(meta["counts"].values())
+    total = sum(s["included"] for s in meta["skipped"].values()) if meta.get("skipped") else sum(meta["counts"].values())
     return render_template("results.html", job_id=job_id, meta=meta, total=total)
 
 
