@@ -1,8 +1,9 @@
+import io
 import json
 import os
+import time
 import uuid
 from functools import wraps
-from pathlib import Path
 
 from flask import (
     Flask,
@@ -20,8 +21,10 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
-JOBS_DIR = Path("/tmp/pollstar_jobs")
-JOBS_DIR.mkdir(exist_ok=True)
+
+# In-memory job store: {job_id: {"meta": {...}, "files": {filename: bytes}, "ts": float}}
+JOBS: dict = {}
+JOB_TTL = 3600  # seconds before a job is eligible for cleanup
 
 CATEGORIES = [
     ("agent", "Agent"),
@@ -29,6 +32,13 @@ CATEGORIES = [
     ("artist", "Artist"),
     ("record_label", "Record Label"),
 ]
+
+
+def _evict_old_jobs():
+    cutoff = time.time() - JOB_TTL
+    stale = [jid for jid, j in JOBS.items() if j["ts"] < cutoff]
+    for jid in stale:
+        del JOBS[jid]
 
 
 def login_required(f):
@@ -66,12 +76,12 @@ def index():
 @app.route("/process", methods=["POST"])
 @login_required
 def process():
-    job_id = str(uuid.uuid4())
-    job_dir = JOBS_DIR / job_id
-    job_dir.mkdir()
+    _evict_old_jobs()
 
+    job_id = str(uuid.uuid4())
     counts = {}
     files_by_category = {}
+    file_bytes = {}
 
     for key, label in CATEGORIES:
         uploads = request.files.getlist(f"{key}_files")
@@ -79,15 +89,17 @@ def process():
         if not uploads:
             continue
         df = dedup_by_email(load_file_objects(uploads))
-        count = len(df)
-        counts[label] = count
+        counts[label] = len(df)
         csvs = generate_csvs(key, df)
         for filename, (data, _mime) in csvs.items():
-            (job_dir / filename).write_bytes(data)
+            file_bytes[filename] = data
         files_by_category[label] = list(csvs.keys())
 
-    meta = {"counts": counts, "files": files_by_category}
-    (job_dir / "meta.json").write_text(json.dumps(meta))
+    JOBS[job_id] = {
+        "meta": {"counts": counts, "files": files_by_category},
+        "files": file_bytes,
+        "ts": time.time(),
+    }
 
     return redirect(url_for("results", job_id=job_id))
 
@@ -95,10 +107,10 @@ def process():
 @app.route("/results/<job_id>")
 @login_required
 def results(job_id):
-    job_dir = JOBS_DIR / job_id
-    if not job_dir.exists():
-        return "Job not found.", 404
-    meta = json.loads((job_dir / "meta.json").read_text())
+    job = JOBS.get(job_id)
+    if not job:
+        return render_template("expired.html"), 404
+    meta = job["meta"]
     total = sum(meta["counts"].values())
     return render_template("results.html", job_id=job_id, meta=meta, total=total)
 
@@ -106,11 +118,11 @@ def results(job_id):
 @app.route("/download/<job_id>/<filename>")
 @login_required
 def download(job_id, filename):
-    job_dir = JOBS_DIR / job_id
-    filepath = job_dir / filename
-    if not filepath.exists() or not filepath.resolve().is_relative_to(job_dir.resolve()):
-        return "File not found.", 404
-    return send_file(filepath, as_attachment=True, download_name=filename)
+    job = JOBS.get(job_id)
+    if not job or filename not in job["files"]:
+        return render_template("expired.html"), 404
+    data = job["files"][filename]
+    return send_file(io.BytesIO(data), as_attachment=True, download_name=filename)
 
 
 if __name__ == "__main__":
