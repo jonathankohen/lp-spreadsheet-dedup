@@ -96,7 +96,10 @@ def process():
         skipped[label] = {"included": len(df), "excluded": len(no_email_df), "total": len(df) + len(no_email_df)}
         csvs = generate_csvs(key, df)
         if not no_email_df.empty:
-            csvs.update(generate_csvs(key, no_email_df, "Phone List"))
+            phone_col = no_email_df["phone"] if "phone" in no_email_df.columns else no_email_df.get("Phone", "")
+            phone_df = no_email_df[phone_col.fillna("").str.strip() != ""]
+            if not phone_df.empty:
+                csvs.update(generate_csvs(key, phone_df, "Phone List"))
         for filename, (data, _mime) in csvs.items():
             file_bytes[filename] = data
         files_by_category[label] = list(csvs.keys())
