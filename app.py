@@ -5,6 +5,8 @@ import time
 import uuid
 from functools import wraps
 
+import pandas as pd
+
 from flask import (
     Flask,
     redirect,
@@ -15,7 +17,14 @@ from flask import (
     url_for,
 )
 
-from main import dedup_by_email, filter_no_email, generate_csvs, load_file_objects
+from main import (
+    dedup_by_email,
+    filter_no_email,
+    generate_csvs,
+    is_apap_format,
+    load_file_objects,
+    split_apap_by_role,
+)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
@@ -84,6 +93,7 @@ def process():
     files_by_category = {}
     file_bytes = {}
 
+    # --- Pollstar category uploads ---
     for key, label in CATEGORIES:
         uploads = request.files.getlist(f"{key}_files")
         uploads = [f for f in uploads if f and f.filename and f.filename.lower().endswith(".xlsx")]
@@ -103,6 +113,33 @@ def process():
         for filename, (data, _mime) in csvs.items():
             file_bytes[filename] = data
         files_by_category[label] = list(csvs.keys())
+
+    # --- APAP upload (single file, auto-split by role) ---
+    apap_uploads = request.files.getlist("apap_files")
+    apap_uploads = [f for f in apap_uploads if f and f.filename and f.filename.lower().endswith(".xlsx")]
+    if apap_uploads:
+        raw = load_file_objects(apap_uploads)
+        if is_apap_format(raw):
+            for cat_key, (cat_df, lead_src) in split_apap_by_role(raw).items():
+                label = dict(CATEGORIES).get(cat_key, cat_key.title())
+                df, no_email_df = filter_no_email(cat_df)
+                df = dedup_by_email(df)
+                apap_label = f"APAP {label}"
+                counts[apap_label] = len(df)
+                skipped[apap_label] = {
+                    "included": len(df),
+                    "excluded": len(no_email_df),
+                    "total": len(df) + len(no_email_df),
+                }
+                csvs = generate_csvs(cat_key, df, lead_source=lead_src)
+                if not no_email_df.empty:
+                    phone_col = no_email_df["phone"] if "phone" in no_email_df.columns else no_email_df.get("Phone", pd.Series(dtype=str))
+                    phone_df = no_email_df[phone_col.fillna("").str.strip() != ""]
+                    if not phone_df.empty:
+                        csvs.update(generate_csvs(cat_key, phone_df, "Phone List", lead_source=lead_src))
+                for filename, (data, _mime) in csvs.items():
+                    file_bytes[filename] = data
+                files_by_category[apap_label] = list(csvs.keys())
 
     JOBS[job_id] = {
         "meta": {"counts": counts, "skipped": skipped, "files": files_by_category},

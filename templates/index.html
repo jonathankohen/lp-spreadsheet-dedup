@@ -28,6 +28,8 @@
     button[type=submit] { width: 100%; padding: .8rem; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; }
     button[type=submit]:hover { background: #1d4ed8; }
     button[type=submit]:disabled { background: #93c5fd; cursor: default; }
+    .zone-wide { margin-bottom: 1rem; text-align: center; }
+    p.section-label { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; margin-bottom: .5rem; margin-top: 1.25rem; }
   </style>
 </head>
 <body>
@@ -36,9 +38,20 @@
       <h1>LP List Processor</h1>
       <a class="logout" href="/logout">Sign out</a>
     </header>
-    <p class="sub">Upload Pollstar XLSX files by category. Each category is deduped and exported as Mailchimp + Salesforce CSVs.</p>
+    <p class="sub">Upload XLSX files to process. Use the Pollstar zones for per-category files, or drop a single APAP attendee list into the APAP zone — the format is auto-detected.</p>
 
     <form method="post" action="/process" enctype="multipart/form-data" id="upload-form">
+
+      <p class="section-label">APAP Conference List</p>
+      <div class="zone zone-wide" id="zone-apap" ondragover="onDragOver(event,'apap')" ondragleave="onDragLeave('apap')" ondrop="onDrop(event,'apap')">
+        <h2>APAP</h2>
+        <p>Drop the full attendee XLSX here — agents, presenters &amp; artists are split automatically.</p>
+        <label class="pick" for="input-apap">Browse file</label>
+        <input type="file" id="input-apap" name="apap_files" accept=".xlsx" multiple onchange="updateList('apap')">
+        <div class="file-list" id="list-apap"></div>
+      </div>
+
+      <p class="section-label">Pollstar Lists</p>
       <div class="zones">
         {% for key, label in [("agent","Agent"),("presenter","Presenter"),("artist","Artist"),("record_label","Record Label")] %}
         <div class="zone" id="zone-{{ key }}" ondragover="onDragOver(event,'{{ key }}')" ondragleave="onDragLeave('{{ key }}')" ondrop="onDrop(event,'{{ key }}')">
@@ -57,7 +70,7 @@
 
   <script>
     const inputs = {};
-    ['agent','presenter','artist','record_label'].forEach(k => { inputs[k] = document.getElementById('input-' + k); });
+    ['apap','agent','presenter','artist','record_label'].forEach(k => { inputs[k] = document.getElementById('input-' + k); });
 
     function updateList(key) {
       const files = inputs[key].files;

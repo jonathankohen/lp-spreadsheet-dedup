@@ -52,6 +52,17 @@ ARTIST_LEAD_SOURCE = "2026 Pollstar Artists"
 RECORD_LABEL_LEAD_SOURCE = "2026 Pollstar Record Labels"
 ACCOUNT_SOURCE = "2026 Pollstar"
 
+APAP_AGENT_LEAD_SOURCE = "2026 APAP Agents"
+APAP_PRESENTER_LEAD_SOURCE = "2026 APAP Presenters"
+APAP_ARTIST_LEAD_SOURCE = "2026 APAP Artists"
+
+# Maps the APAP "Role in the field" value → (category_key, lead_source)
+APAP_ROLE_MAP = {
+    "agent/manager": ("agent", APAP_AGENT_LEAD_SOURCE),
+    "presenter/programmer": ("presenter", APAP_PRESENTER_LEAD_SOURCE),
+    "artist/artistic organization": ("artist", APAP_ARTIST_LEAD_SOURCE),
+}
+
 
 # ---------------------------------------------------------------------------
 # Data loading & cleaning
@@ -76,6 +87,46 @@ def load_file_objects(file_objects) -> pd.DataFrame:
         if f and f.filename and f.filename.lower().endswith(".xlsx"):
             dfs.append(pd.read_excel(f.stream, dtype=str))
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
+
+def is_apap_format(df: pd.DataFrame) -> bool:
+    return "Everyone: Email" in df.columns
+
+
+def normalize_apap(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename APAP columns to the standard Pollstar column names."""
+    renamed = df.rename(
+        columns={
+            "Everyone: First Name": "FirstName",
+            "Everyone: Last Name": "LastName",
+            "Everyone: Title": "Title",
+            "Everyone: Organization": "Company",
+            "Everyone: Street Address": "MailingAddress1",
+            "Everyone: City": "MailingCity",
+            "Everyone: State/Province if applicable": "MailingState",
+            "Everyone: Postal code": "MailingZip",
+            "Everyone Country": "MailingCountry",
+            "Everyone: Phone": "phone",
+            "Everyone: Email": "Email",
+        }
+    )
+    renamed["MailingAddress2"] = ""
+    return renamed
+
+
+def split_apap_by_role(df: pd.DataFrame) -> dict[str, tuple[pd.DataFrame, str]]:
+    """
+    Split a normalized APAP DataFrame by role.
+    Returns {category_key: (df, lead_source)} for known roles only.
+    """
+    role_col = "Everyone: Role in the field"
+    result = {}
+    for raw_role, (cat_key, lead_source) in APAP_ROLE_MAP.items():
+        mask = df[role_col].fillna("").str.strip().str.lower() == raw_role
+        subset = df[mask].reset_index(drop=True)
+        if not subset.empty:
+            result[cat_key] = (normalize_apap(subset), lead_source)
+    return result
 
 
 def filter_no_email(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -145,68 +196,221 @@ def format_phone(raw: str) -> str:
 # ---------------------------------------------------------------------------
 
 COUNTRY_CODES = {
-    "afghanistan": "AFG", "albania": "ALB", "algeria": "DZA", "andorra": "AND",
-    "angola": "AGO", "argentina": "ARG", "armenia": "ARM", "australia": "AUS",
-    "austria": "AUT", "azerbaijan": "AZE", "bahrain": "BHR", "bangladesh": "BGD",
-    "belarus": "BLR", "belgium": "BEL", "bolivia": "BOL", "bosnia and herzegovina": "BIH",
-    "botswana": "BWA", "brazil": "BRA", "bulgaria": "BGR", "cambodia": "KHM",
-    "cameroon": "CMR", "canada": "CAN", "chile": "CHL", "china": "CHN",
-    "colombia": "COL", "costa rica": "CRI", "croatia": "HRV", "cuba": "CUB",
-    "cyprus": "CYP", "czech republic": "CZE", "czechia": "CZE", "denmark": "DNK",
-    "dominican republic": "DOM", "ecuador": "ECU", "egypt": "EGY", "el salvador": "SLV",
-    "estonia": "EST", "ethiopia": "ETH", "finland": "FIN", "france": "FRA",
-    "georgia": "GEO", "germany": "DEU", "ghana": "GHA", "greece": "GRC",
-    "guatemala": "GTM", "honduras": "HND", "hong kong": "HKG", "hungary": "HUN",
-    "iceland": "ISL", "india": "IND", "indonesia": "IDN", "iran": "IRN",
-    "iraq": "IRQ", "ireland": "IRL", "israel": "ISR", "italy": "ITA",
-    "jamaica": "JAM", "japan": "JPN", "jordan": "JOR", "kazakhstan": "KAZ",
-    "kenya": "KEN", "kuwait": "KWT", "latvia": "LVA", "lebanon": "LBN",
-    "lithuania": "LTU", "luxembourg": "LUX", "malaysia": "MYS", "malta": "MLT",
-    "mexico": "MEX", "moldova": "MDA", "monaco": "MCO", "morocco": "MAR",
-    "mozambique": "MOZ", "myanmar": "MMR", "namibia": "NAM", "nepal": "NPL",
-    "netherlands": "NLD", "new zealand": "NZL", "nicaragua": "NIC", "nigeria": "NGA",
-    "north korea": "PRK", "north macedonia": "MKD", "norway": "NOR", "oman": "OMN",
-    "pakistan": "PAK", "panama": "PAN", "paraguay": "PRY", "peru": "PER",
-    "philippines": "PHL", "poland": "POL", "portugal": "PRT", "puerto rico": "PRI",
-    "qatar": "QAT", "romania": "ROU", "russia": "RUS", "russian federation": "RUS",
-    "saudi arabia": "SAU", "senegal": "SEN", "serbia": "SRB", "singapore": "SGP",
-    "slovakia": "SVK", "slovenia": "SVN", "south africa": "ZAF", "south korea": "KOR",
-    "spain": "ESP", "sri lanka": "LKA", "sweden": "SWE", "switzerland": "CHE",
-    "taiwan": "TWN", "tanzania": "TZA", "thailand": "THA", "trinidad and tobago": "TTO",
-    "tunisia": "TUN", "turkey": "TUR", "türkiye": "TUR", "ukraine": "UKR",
-    "united arab emirates": "ARE", "uae": "ARE", "united kingdom": "GBR",
-    "uk": "GBR", "great britain": "GBR", "england": "GBR", "scotland": "GBR",
-    "wales": "GBR", "united states": "USA", "united states of america": "USA",
-    "us": "USA", "usa": "USA", "u.s.a.": "USA", "uruguay": "URY",
-    "uzbekistan": "UZB", "venezuela": "VEN", "vietnam": "VNM", "zimbabwe": "ZWE",
-    "bahamas": "BHS", "the bahamas": "BHS", "faroe islands": "FRO",
-    "macedonia": "MKD", "swaziland": "SWZ", "eswatini": "SWZ",
+    "afghanistan": "AFG",
+    "albania": "ALB",
+    "algeria": "DZA",
+    "andorra": "AND",
+    "angola": "AGO",
+    "argentina": "ARG",
+    "armenia": "ARM",
+    "australia": "AUS",
+    "austria": "AUT",
+    "azerbaijan": "AZE",
+    "bahrain": "BHR",
+    "bangladesh": "BGD",
+    "belarus": "BLR",
+    "belgium": "BEL",
+    "bolivia": "BOL",
+    "bosnia and herzegovina": "BIH",
+    "botswana": "BWA",
+    "brazil": "BRA",
+    "bulgaria": "BGR",
+    "cambodia": "KHM",
+    "cameroon": "CMR",
+    "canada": "CAN",
+    "chile": "CHL",
+    "china": "CHN",
+    "colombia": "COL",
+    "costa rica": "CRI",
+    "croatia": "HRV",
+    "cuba": "CUB",
+    "cyprus": "CYP",
+    "czech republic": "CZE",
+    "czechia": "CZE",
+    "denmark": "DNK",
+    "dominican republic": "DOM",
+    "ecuador": "ECU",
+    "egypt": "EGY",
+    "el salvador": "SLV",
+    "estonia": "EST",
+    "ethiopia": "ETH",
+    "finland": "FIN",
+    "france": "FRA",
+    "georgia": "GEO",
+    "germany": "DEU",
+    "ghana": "GHA",
+    "greece": "GRC",
+    "guatemala": "GTM",
+    "honduras": "HND",
+    "hong kong": "HKG",
+    "hungary": "HUN",
+    "iceland": "ISL",
+    "india": "IND",
+    "indonesia": "IDN",
+    "iran": "IRN",
+    "iraq": "IRQ",
+    "ireland": "IRL",
+    "israel": "ISR",
+    "italy": "ITA",
+    "jamaica": "JAM",
+    "japan": "JPN",
+    "jordan": "JOR",
+    "kazakhstan": "KAZ",
+    "kenya": "KEN",
+    "kuwait": "KWT",
+    "latvia": "LVA",
+    "lebanon": "LBN",
+    "lithuania": "LTU",
+    "luxembourg": "LUX",
+    "malaysia": "MYS",
+    "malta": "MLT",
+    "mexico": "MEX",
+    "moldova": "MDA",
+    "monaco": "MCO",
+    "morocco": "MAR",
+    "mozambique": "MOZ",
+    "myanmar": "MMR",
+    "namibia": "NAM",
+    "nepal": "NPL",
+    "netherlands": "NLD",
+    "new zealand": "NZL",
+    "nicaragua": "NIC",
+    "nigeria": "NGA",
+    "north korea": "PRK",
+    "north macedonia": "MKD",
+    "norway": "NOR",
+    "oman": "OMN",
+    "pakistan": "PAK",
+    "panama": "PAN",
+    "paraguay": "PRY",
+    "peru": "PER",
+    "philippines": "PHL",
+    "poland": "POL",
+    "portugal": "PRT",
+    "puerto rico": "PRI",
+    "qatar": "QAT",
+    "romania": "ROU",
+    "russia": "RUS",
+    "russian federation": "RUS",
+    "saudi arabia": "SAU",
+    "senegal": "SEN",
+    "serbia": "SRB",
+    "singapore": "SGP",
+    "slovakia": "SVK",
+    "slovenia": "SVN",
+    "south africa": "ZAF",
+    "south korea": "KOR",
+    "spain": "ESP",
+    "sri lanka": "LKA",
+    "sweden": "SWE",
+    "switzerland": "CHE",
+    "taiwan": "TWN",
+    "tanzania": "TZA",
+    "thailand": "THA",
+    "trinidad and tobago": "TTO",
+    "tunisia": "TUN",
+    "turkey": "TUR",
+    "türkiye": "TUR",
+    "ukraine": "UKR",
+    "united arab emirates": "ARE",
+    "uae": "ARE",
+    "united kingdom": "GBR",
+    "uk": "GBR",
+    "great britain": "GBR",
+    "england": "GBR",
+    "scotland": "GBR",
+    "wales": "GBR",
+    "united states": "USA",
+    "united states of america": "USA",
+    "us": "USA",
+    "usa": "USA",
+    "u.s.a.": "USA",
+    "uruguay": "URY",
+    "uzbekistan": "UZB",
+    "venezuela": "VEN",
+    "vietnam": "VNM",
+    "zimbabwe": "ZWE",
+    "bahamas": "BHS",
+    "the bahamas": "BHS",
+    "faroe islands": "FRO",
+    "macedonia": "MKD",
+    "swaziland": "SWZ",
+    "eswatini": "SWZ",
     "republic of trinidad and tobago": "TTO",
 }
 
 STATE_CODES = {
     # US states
-    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
-    "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
-    "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
-    "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
-    "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
-    "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
-    "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
-    "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
-    "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
-    "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
-    "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
-    "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
-    "wisconsin": "WI", "wyoming": "WY", "district of columbia": "DC",
-    "washington dc": "DC", "washington d.c.": "DC",
+    "alabama": "AL",
+    "alaska": "AK",
+    "arizona": "AZ",
+    "arkansas": "AR",
+    "california": "CA",
+    "colorado": "CO",
+    "connecticut": "CT",
+    "delaware": "DE",
+    "florida": "FL",
+    "georgia": "GA",
+    "hawaii": "HI",
+    "idaho": "ID",
+    "illinois": "IL",
+    "indiana": "IN",
+    "iowa": "IA",
+    "kansas": "KS",
+    "kentucky": "KY",
+    "louisiana": "LA",
+    "maine": "ME",
+    "maryland": "MD",
+    "massachusetts": "MA",
+    "michigan": "MI",
+    "minnesota": "MN",
+    "mississippi": "MS",
+    "missouri": "MO",
+    "montana": "MT",
+    "nebraska": "NE",
+    "nevada": "NV",
+    "new hampshire": "NH",
+    "new jersey": "NJ",
+    "new mexico": "NM",
+    "new york": "NY",
+    "north carolina": "NC",
+    "north dakota": "ND",
+    "ohio": "OH",
+    "oklahoma": "OK",
+    "oregon": "OR",
+    "pennsylvania": "PA",
+    "rhode island": "RI",
+    "south carolina": "SC",
+    "south dakota": "SD",
+    "tennessee": "TN",
+    "texas": "TX",
+    "utah": "UT",
+    "vermont": "VT",
+    "virginia": "VA",
+    "washington": "WA",
+    "west virginia": "WV",
+    "wisconsin": "WI",
+    "wyoming": "WY",
+    "district of columbia": "DC",
+    "washington dc": "DC",
+    "washington d.c.": "DC",
     # Canadian provinces & territories
-    "alberta": "AB", "british columbia": "BC", "manitoba": "MB",
-    "new brunswick": "NB", "newfoundland and labrador": "NL",
-    "newfoundland & labrador": "NL", "newfoundland": "NL",
-    "northwest territories": "NT", "nova scotia": "NS", "nunavut": "NU",
-    "ontario": "ON", "prince edward island": "PE", "quebec": "QC",
-    "québec": "QC", "saskatchewan": "SK", "yukon": "YT",
+    "alberta": "AB",
+    "british columbia": "BC",
+    "manitoba": "MB",
+    "new brunswick": "NB",
+    "newfoundland and labrador": "NL",
+    "newfoundland & labrador": "NL",
+    "newfoundland": "NL",
+    "northwest territories": "NT",
+    "nova scotia": "NS",
+    "nunavut": "NU",
+    "ontario": "ON",
+    "prince edward island": "PE",
+    "quebec": "QC",
+    "québec": "QC",
+    "saskatchewan": "SK",
+    "yukon": "YT",
 }
 
 
@@ -391,7 +595,7 @@ def build_mailchimp_record_label(df: pd.DataFrame, lead_source: str) -> list[dic
 # ---------------------------------------------------------------------------
 # Salesforce builders
 # SF files use UTF-16 LE encoding (matching the template files).
-# The Presenter template has a column spelled "Derpartment" — replicated here.
+# The Presenter template has a column spelled "Department" — replicated here.
 # ---------------------------------------------------------------------------
 
 SF_BASE_COLS = [
@@ -421,7 +625,7 @@ SF_BASE_COLS = [
 
 SF_PRESENTER_COLS = (
     SF_BASE_COLS[:5]
-    + ["Derpartment", "Description"]  # Capacity goes in Description
+    + ["Department", "Description"]  # Capacity goes in Description
     + SF_BASE_COLS[5:]
 )
 
@@ -500,7 +704,7 @@ def build_sf_presenter(df: pd.DataFrame, lead_source: str) -> list[dict]:
             "Account Name": v(r, "Company"),
             "Title": v(r, "Title"),
             "Account Source": ACCOUNT_SOURCE,
-            "Derpartment": lead_source,
+            "Department": lead_source,
             "Description": v(r, "Capacity"),
         }
         row.update(_sf_address_block(r))
@@ -541,19 +745,26 @@ def _rows_to_bytes(cols: list[str], rows: list[dict], encoding: str) -> bytes:
     return buf.getvalue().encode(encoding)
 
 
-def generate_csvs(category: str, df: pd.DataFrame, suffix: str = "") -> dict:
+def generate_csvs(
+    category: str,
+    df: pd.DataFrame,
+    suffix: str = "",
+    lead_source: str = None,
+) -> dict:
     """
     Returns {filename: (bytes, mime_type)} for Mailchimp + SF outputs.
     category must be one of: agent, presenter, artist, record_label
     suffix is appended before .csv, e.g. "Phone List" → "... - Phone List.csv"
+    lead_source overrides the default Pollstar lead source string when provided.
     """
     today = date.today().strftime("%Y-%m-%d")
     sfx = f" - {suffix}" if suffix else ""
     out = {}
 
     if category == "agent":
-        mc_rows = build_mailchimp_agent(df, AGENT_LEAD_SOURCE)
-        sf_rows = build_sf_agent(df, AGENT_LEAD_SOURCE)
+        src = lead_source or AGENT_LEAD_SOURCE
+        mc_rows = build_mailchimp_agent(df, src)
+        sf_rows = build_sf_agent(df, src)
         out[f"Mailchimp Agent List - {today}{sfx}.csv"] = (
             _rows_to_bytes(MC_AGENT_COLS, mc_rows, "utf-8-sig"),
             "text/csv",
@@ -564,8 +775,9 @@ def generate_csvs(category: str, df: pd.DataFrame, suffix: str = "") -> dict:
         )
 
     elif category == "presenter":
-        mc_rows = build_mailchimp_presenter(df, PRESENTER_LEAD_SOURCE)
-        sf_rows = build_sf_presenter(df, PRESENTER_LEAD_SOURCE)
+        src = lead_source or PRESENTER_LEAD_SOURCE
+        mc_rows = build_mailchimp_presenter(df, src)
+        sf_rows = build_sf_presenter(df, src)
         out[f"Mailchimp Presenter List - {today}{sfx}.csv"] = (
             _rows_to_bytes(MC_PRESENTER_COLS, mc_rows, "utf-8-sig"),
             "text/csv",
@@ -576,8 +788,9 @@ def generate_csvs(category: str, df: pd.DataFrame, suffix: str = "") -> dict:
         )
 
     elif category == "artist":
-        mc_rows = build_mailchimp_artist(df, ARTIST_LEAD_SOURCE)
-        sf_rows = build_sf_artist(df, ARTIST_LEAD_SOURCE)
+        src = lead_source or ARTIST_LEAD_SOURCE
+        mc_rows = build_mailchimp_artist(df, src)
+        sf_rows = build_sf_artist(df, src)
         out[f"Mailchimp Artist List - {today}{sfx}.csv"] = (
             _rows_to_bytes(MC_ARTIST_COLS, mc_rows, "utf-8-sig"),
             "text/csv",
@@ -588,8 +801,9 @@ def generate_csvs(category: str, df: pd.DataFrame, suffix: str = "") -> dict:
         )
 
     elif category == "record_label":
-        mc_rows = build_mailchimp_record_label(df, RECORD_LABEL_LEAD_SOURCE)
-        sf_rows = build_sf_record_label(df, RECORD_LABEL_LEAD_SOURCE)
+        src = lead_source or RECORD_LABEL_LEAD_SOURCE
+        mc_rows = build_mailchimp_record_label(df, src)
+        sf_rows = build_sf_record_label(df, src)
         out[f"Mailchimp Record Label List - {today}{sfx}.csv"] = (
             _rows_to_bytes(MC_RECORD_LABEL_COLS, mc_rows, "utf-8-sig"),
             "text/csv",
